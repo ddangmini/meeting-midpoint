@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>중간 지점 찾기</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- ★ 여기에 본인의 카카오 JavaScript 앱 키를 입력하세요 ★ -->
+  <script>
+    // document.write 경고 방지를 위해 async 방식으로 로드
+    (function() {
+      var script = document.createElement('script');
+      script.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=6a44837e26e10c6d5f18900f74450bc2&libraries=services&autoload=false';
+      script.onload = function() {
+        kakao.maps.load(function() {
+          window._kakaoMapReady = true;
+          document.dispatchEvent(new Event('kakaoMapReady'));
+        });
+      };
+      document.head.appendChild(script);
+    })();
+  </script>
+
+  <style>
+    :root {
+      --bg: #0e0f13;
+      --surface: #16181f;
+      --surface2: #1e2029;
+      --border: #2a2d3a;
+      --accent: #5b8cff;
+      --accent2: #ff6b6b;
+      --accent3: #4ecdc4;
+      --text: #e8eaf0;
+      --text-muted: #6b7080;
+      --text-dim: #3a3d4a;
+      --radius: 14px;
+      --font-body: 'Noto Sans KR', sans-serif;
+      --font-mono: 'DM Mono', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      overflow-x: hidden;
+    }
+
+    /* ── HEADER ── */
+    header {
+      padding: 28px 40px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      background: var(--surface);
+    }
+    .logo {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .logo span { color: var(--accent); }
+    .tagline {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    /* ── MAIN LAYOUT ── */
+    main {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      height: calc(100vh - 77px);
+    }
+
+    /* ── PANEL ── */
+    .panel {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .section-label {
+      font-size: 0.68rem;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 10px;
+    }
+
+    /* ── PERSON CARDS ── */
+    .persons-list { display: flex; flex-direction: column; gap: 12px; }
+
+    .person-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      position: relative;
+      transition: border-color 0.2s;
+    }
+    .person-card:focus-within { border-color: var(--accent); }
+
+    .person-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .person-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .person-name {
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .remove-btn {
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .remove-btn:hover { color: var(--accent2); background: rgba(255,107,107,0.08); }
+
+    .address-input-wrap { position: relative; }
+    .address-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 0.82rem;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .address-input::placeholder { color: var(--text-dim); }
+    .address-input:focus { border-color: var(--accent); }
+
+    .search-btn {
+      margin-top: 8px;
+      width: 100%;
+      padding: 8px;
+      background: rgba(91,140,255,0.1);
+      border: 1px solid rgba(91,140,255,0.25);
+      border-radius: 8px;
+      color: var(--accent);
+      font-family: var(--font-body);
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .search-btn:hover { background: rgba(91,140,255,0.18); border-color: var(--accent); }
+
+    .geocode-status {
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+      margin-top: 6px;
+      padding: 4px 8px;
+      border-radius: 5px;
+    }
+    .geocode-status.ok { color: var(--accent3); background: rgba(78,205,196,0.08); }
+    .geocode-status.err { color: var(--accent2); background: rgba(255,107,107,0.08); }
+    .geocode-status.loading { color: var(--text-muted); }
+
+    /* ── ADD PERSON ── */
+    .add-person-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px;
+      background: none;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-family: var(--font-body);
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .add-person-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── MODE TOGGLE ── */
+    .mode-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .mode-btn {
+      padding: 10px 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-muted);
+      font-family: var(--font-body);
+      font-size: 0.78rem;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+      line-height: 1.4;
+    }
+    .mode-btn.active {
+      background: rgba(91,140,255,0.12);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .mode-btn .mode-icon { font-size: 1.1rem; display: block; margin-bottom: 4px; }
+
+    /* ── CALCULATE BTN ── */
+    .calc-btn {
+      padding: 14px;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+      transition: opacity 0.2s, transform 0.15s;
+    }
+    .calc-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+    .calc-btn:active { transform: translateY(0); }
+    .calc-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+    /* ── RESULT BLOCK ── */
+    .result-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .result-block.visible { display: flex; }
+
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+    }
+    .result-key { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.72rem; }
+    .result-val { color: var(--text); font-weight: 500; font-size: 0.82rem; }
+    .result-val.coord { font-family: var(--font-mono); color: var(--accent3); font-size: 0.72rem; }
+
+    .transit-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; margin-top: 4px; }
+    .transit-table th { color: var(--text-muted); font-weight: 400; text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+    .transit-table td { padding: 5px 6px; color: var(--text); }
+    .transit-table tr:not(:last-child) td { border-bottom: 1px solid var(--text-dim); }
+
+    .diff-badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 20px;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+    }
+    .diff-badge.good { background: rgba(78,205,196,0.12); color: var(--accent3); }
+    .diff-badge.warn { background: rgba(255,107,107,0.12); color: var(--accent2); }
+
+    .error-msg {
+      font-size: 0.78rem;
+      color: var(--accent2);
+      background: rgba(255,107,107,0.08);
+      border: 1px solid rgba(255,107,107,0.2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: none;
+    }
+    .error-msg.visible { display: block; }
+
+    /* ── MAP ── */
+    #map {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+    }
+
+    /* ── LOADING OVERLAY ── */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(14,15,19,0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      backdrop-filter: blur(4px);
+    }
+    .loading-overlay.visible { display: flex; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .loading-text { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.78rem; margin-top: 14px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── INFO NOTE ── */
+    .info-note {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      line-height: 1.6;
+    }
+    .info-note strong { color: var(--text); }
+
+    /* ── 대안 후보 목록 ── */
+    .alt-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      background: var(--bg);
+    }
+    .alt-item:hover { background: rgba(91,140,255,0.06); border-color: rgba(91,140,255,0.3); }
+    .alt-item.active { background: rgba(91,140,255,0.1); border-color: var(--accent); }
+    .alt-rank {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      min-width: 24px;
+      text-align: center;
+    }
+    .alt-info { flex: 1; min-width: 0; }
+    .alt-addr {
+      font-size: 0.75rem;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 3px;
+    }
+    .alt-times { font-size: 0.68rem; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 4px; }
+
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">중간<span>지점</span></div>
+  <div class="tagline">공평한 만남의 장소를 찾아드립니다</div>
+</header>
+
+<main>
+  <!-- ── 좌측 패널 ── -->
+  <div class="panel">
+
+    <!-- 참여자 목록 -->
+    <div>
+      <div class="section-label">참여자 위치</div>
+      <div class="persons-list" id="personsList"></div>
+      <button class="add-person-btn" id="addPersonBtn" style="margin-top:10px">
+        <span>＋</span> 참여자 추가
+      </button>
+    </div>
+
+    <!-- 중앙 기준 선택 -->
+    <div>
+      <div class="section-label">중앙 기준</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="modeGeo" onclick="setMode('geo')">
+          <span class="mode-icon">📍</span>
+          지리적 중앙<br>
+          <small style="font-size:0.68rem;opacity:0.7">좌표 평균</small>
+        </button>
+        <button class="mode-btn" id="modeTransit" onclick="setMode('transit')">
+          <span class="mode-icon">🚇</span>
+          교통적 중앙<br>
+          <small style="font-size:0.68rem;opacity:0.7">이동시간 균형</small>
+        </button>
+      </div>
+      <div class="info-note" style="margin-top:10px" id="modeDesc">
+        모든 참여자 좌표의 <strong>위도·경도 평균값</strong>을 중앙으로 설정합니다. 직선거리 기준으로 가장 공평한 지점입니다.
+      </div>
+    </div>
+
+    <!-- 계산 -->
+    <div>
+      <button class="calc-btn" id="calcBtn" onclick="calculate()">중간 지점 찾기</button>
+      <div class="error-msg" id="errorMsg"></div>
+    </div>
+
+    <!-- 결과 -->
+    <div>
+      <div class="section-label">결과</div>
+      <div class="result-block" id="resultBlock">
+        <div class="result-row">
+          <span class="result-key">좌표</span>
+          <span class="result-val coord" id="resCoord">—</span>
+        </div>
+        <div class="result-row">
+          <span class="result-key">주소 (역지오코딩)</span>
+          <span class="result-val" id="resAddr" style="text-align:right;max-width:200px;font-size:0.75rem">—</span>
+        </div>
+        <div id="altCandidatesWrap" style="display:none;margin-top:4px">
+          <div style="height:1px;background:var(--border);margin:4px 0"></div>
+          <div class="result-key" style="margin-bottom:8px">상위 후보 지점 <small style="opacity:0.6">(클릭하면 지도 이동)</small></div>
+          <div id="altCandidatesList"></div>
+        </div>
+
+        <div id="transitResultWrap" style="display:none">
+          <div style="height:1px;background:var(--border);margin:4px 0"></div>
+          <div class="result-key" style="margin-bottom:6px">참여자별 예상 이동시간</div>
+          <table class="transit-table">
+            <thead><tr><th>참여자</th><th>이동시간</th><th>차이</th></tr></thead>
+            <tbody id="transitTableBody"></tbody>
+          </table>
+          <div class="result-row" style="margin-top:8px">
+            <span class="result-key">최대 시간 차이</span>
+            <span class="result-val" id="maxDiff">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 안내 -->
+    <div class="info-note">
+      <strong>교통적 중앙 안내</strong><br>
+      카카오 모빌리티 API의 대중교통 경로를 사용합니다. 실시간 혼잡도는 반영되지 않으며, 후보 지점(격자 탐색) 기준으로 시간 차이가 가장 적은 곳을 선택합니다.
+    </div>
+
+  </div>
+
+  <!-- ── 지도 영역 ── -->
+  <div id="map"></div>
+</main>
+
+<!-- 로딩 오버레이 -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div style="text-align:center">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingText">계산 중...</div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ★ 카카오 REST API 키 (지오코딩 + 교통 API용)
+   JavaScript 앱 키와 별도로 REST API 키가 필요합니다.
+   카카오 개발자 콘솔 > 내 애플리케이션 > 앱 키 > REST API 키
+   ============================================================ */
+const KAKAO_REST_KEY = "390600f0296da022108fcac0d074f119";
+
+/* ============================================================
+   상태
+   ============================================================ */
+const COLORS = ["#5b8cff","#ff6b6b","#4ecdc4","#ffd93d","#c77dff","#ff9f43"];
+let persons = [];
+let currentMode = "geo";
+let map = null;
+let markers = [];
+let midMarker = null;
+let geocoder = null;
+
+/* ============================================================
+   초기화
+   ============================================================ */
+function initApp() {
+  // 카카오맵 초기화
+  try {
+    map = new kakao.maps.Map(document.getElementById("map"), {
+      center: new kakao.maps.LatLng(37.5665, 126.9780),
+      level: 8
+    });
+    geocoder = new kakao.maps.services.Geocoder();
+  } catch(e) {
+    document.getElementById("map").innerHTML =
+      `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b7080;font-size:0.85rem;flex-direction:column;gap:8px">
+        <span style="font-size:2rem">🗺️</span>
+        <span>카카오맵 API 키를 확인해주세요</span>
+        <span style="font-size:0.72rem;opacity:0.6">appkey= 부분에 JS 키가 올바르게 입력되었는지 확인하세요</span>
+      </div>`;
+  }
+
+  // 기본 참여자 2명
+  addPerson("참여자 1");
+  addPerson("참여자 2");
+}
+
+// kakao.maps.load 완료 후 실행
+if (window._kakaoMapReady) {
+  initApp();
+} else {
+  document.addEventListener('kakaoMapReady', initApp);
+}
+
+/* ============================================================
+   참여자 관리
+   ============================================================ */
+function addPerson(name) {
+  const id = Date.now() + Math.random();
+  const color = COLORS[persons.length % COLORS.length];
+  persons.push({ id, name: name || `참여자 ${persons.length + 1}`, color, address: "", lat: null, lng: null });
+  renderPersons();
+}
+
+function removePerson(id) {
+  if (persons.length <= 2) { showError("최소 2명 이상이어야 합니다."); return; }
+  persons = persons.filter(p => p.id !== id);
+  renderPersons();
+}
+
+function renderPersons() {
+  const list = document.getElementById("personsList");
+  list.innerHTML = "";
+  persons.forEach((p, i) => {
+    const div = document.createElement("div");
+    div.className = "person-card";
+    div.innerHTML = `
+      <div class="person-header">
+        <div class="person-dot" style="background:${p.color}"></div>
+        <span class="person-name">${p.name}</span>
+        <button class="remove-btn" onclick="removePerson(${p.id})" title="삭제">✕</button>
+      </div>
+      <div class="address-input-wrap">
+        <input
+          class="address-input"
+          type="text"
+          placeholder="주소 또는 장소명 입력 (예: 강남역)"
+          value="${p.address}"
+          id="addr_${p.id}"
+          onkeydown="if(event.key==='Enter') geocodePerson(${p.id})"
+        />
+      </div>
+      <button class="search-btn" onclick="geocodePerson(${p.id})">📍 위치 확인</button>
+      <div class="geocode-status" id="status_${p.id}"></div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+document.getElementById("addPersonBtn").addEventListener("click", () => {
+  if (persons.length >= 6) { showError("최대 6명까지 추가 가능합니다."); return; }
+  addPerson();
+});
+
+/* ============================================================
+   지오코딩
+   ============================================================ */
+async function geocodePerson(id) {
+  const person = persons.find(p => p.id === id);
+  if (!person) return;
+  const input = document.getElementById(`addr_${id}`);
+  const statusEl = document.getElementById(`status_${id}`);
+  const query = input.value.trim();
+  if (!query) return;
+
+  person.address = query;
+  statusEl.className = "geocode-status loading";
+  statusEl.textContent = "검색 중...";
+
+  if (!geocoder) {
+    // REST API 폴백
+    try {
+      const res = await fetch(
+        `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(query)}`,
+        { headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` } }
+      );
+      const data = await res.json();
+      if (data.documents && data.documents.length > 0) {
+        const doc = data.documents[0];
+        person.lat = parseFloat(doc.y);
+        person.lng = parseFloat(doc.x);
+        statusEl.className = "geocode-status ok";
+        statusEl.textContent = `✓ ${doc.place_name || doc.address_name}`;
+        updateMarkers();
+      } else {
+        statusEl.className = "geocode-status err";
+        statusEl.textContent = "✗ 위치를 찾을 수 없습니다.";
+      }
+    } catch(e) {
+      statusEl.className = "geocode-status err";
+      statusEl.textContent = "✗ API 오류: REST 키를 확인하세요.";
+    }
+    return;
+  }
+
+  // 카카오맵 SDK 지오코더 사용
+  geocoder.addressSearch(query, (result, status) => {
+    if (status === kakao.maps.services.Status.OK && result.length > 0) {
+      person.lat = parseFloat(result[0].y);
+      person.lng = parseFloat(result[0].x);
+      statusEl.className = "geocode-status ok";
+      statusEl.textContent = `✓ ${result[0].address_name}`;
+      updateMarkers();
+    } else {
+      // 키워드 검색 시도
+      const ps = new kakao.maps.services.Places();
+      ps.keywordSearch(query, (places, pStatus) => {
+        if (pStatus === kakao.maps.services.Status.OK && places.length > 0) {
+          person.lat = parseFloat(places[0].y);
+          person.lng = parseFloat(places[0].x);
+          statusEl.className = "geocode-status ok";
+          statusEl.textContent = `✓ ${places[0].place_name}`;
+          updateMarkers();
+        } else {
+          statusEl.className = "geocode-status err";
+          statusEl.textContent = "✗ 위치를 찾을 수 없습니다.";
+        }
+      });
+    }
+  });
+}
+
+/* ============================================================
+   마커 업데이트
+   ============================================================ */
+function updateMarkers() {
+  if (!map) return;
+  markers.forEach(m => m.setMap(null));
+  markers = [];
+
+  const bounds = new kakao.maps.LatLngBounds();
+
+  persons.forEach(p => {
+    if (p.lat === null) return;
+    const pos = new kakao.maps.LatLng(p.lat, p.lng);
+
+    // SVG 마커 (색상별로 구분, 이니셜 표시)
+    const initial = p.name[0] || '?';
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42">
+        <path d="M16 2C9.373 2 4 7.373 4 14c0 8 12 26 12 26S28 22 28 14C28 7.373 22.627 2 16 2z"
+              fill="${p.color}" stroke="white" stroke-width="2"/>
+        <circle cx="16" cy="14" r="7" fill="white" opacity="0.9"/>
+        <text x="16" y="18" text-anchor="middle" font-size="9"
+              font-family="Noto Sans KR, sans-serif" font-weight="700"
+              fill="${p.color}">${initial}</text>
+      </svg>`.trim();
+
+    const markerImage = new kakao.maps.MarkerImage(
+      'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
+      new kakao.maps.Size(32, 42),
+      { offset: new kakao.maps.Point(16, 42) }
+    );
+
+    const marker = new kakao.maps.Marker({
+      position: pos,
+      map,
+      title: p.name,
+      image: markerImage
+    });
+    const infoWindow = new kakao.maps.InfoWindow({
+      content: `<div style="padding:6px 10px;font-family:'Noto Sans KR',sans-serif;font-size:12px;color:#333">${p.name}<br><small>${p.address}</small></div>`
+    });
+    kakao.maps.event.addListener(marker, "click", () => infoWindow.open(map, marker));
+    markers.push(marker);
+    bounds.extend(pos);
+  });
+
+  if (markers.length > 0) map.setBounds(bounds);
+}
+
+/* ============================================================
+   모드 전환
+   ============================================================ */
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById("modeGeo").classList.toggle("active", mode === "geo");
+  document.getElementById("modeTransit").classList.toggle("active", mode === "transit");
+  const desc = document.getElementById("modeDesc");
+  if (mode === "geo") {
+    desc.innerHTML = `모든 참여자 좌표의 <strong>위도·경도 평균값</strong>을 중앙으로 설정합니다. 직선거리 기준으로 가장 공평한 지점입니다.`;
+  } else {
+    desc.innerHTML = `중간 지점 후보들에 대해 <strong>대중교통 이동시간</strong>을 계산, 참여자 간 시간 차이가 가장 적은 지점을 선택합니다.<br><small style="opacity:0.6">카카오 모빌리티 REST API 필요</small>`;
+  }
+}
+
+/* ============================================================
+   계산 메인
+   ============================================================ */
+async function calculate() {
+  clearError();
+  const valid = persons.filter(p => p.lat !== null && p.lng !== null);
+  if (valid.length < 2) { showError("2명 이상의 위치를 먼저 확인해주세요."); return; }
+
+  showLoading("중간 지점 계산 중...");
+
+  try {
+    if (currentMode === "geo") {
+      calcGeo(valid);
+    } else {
+      await calcTransit(valid);
+    }
+  } catch(e) {
+    hideLoading();
+    showError("오류가 발생했습니다: " + e.message);
+  }
+}
+
+/* ── 지리적 중앙 ── */
+function calcGeo(valid) {
+  const avgLat = valid.reduce((s, p) => s + p.lat, 0) / valid.length;
+  const avgLng = valid.reduce((s, p) => s + p.lng, 0) / valid.length;
+  hideLoading();
+  showResult({ lat: avgLat, lng: avgLng, mode: "geo" });
+}
+
+/* ── 교통적 중앙 ── */
+async function calcTransit(valid) {
+  // 지리적 중앙 기준으로 후보 격자 생성 (±3km 범위, 7×7 = 49개)
+  const geoLat = valid.reduce((s, p) => s + p.lat, 0) / valid.length;
+  const geoLng = valid.reduce((s, p) => s + p.lng, 0) / valid.length;
+
+  const GRID = 7;
+  const RANGE_KM = 3;
+  const LAT_DELTA = RANGE_KM / 111;
+  const LNG_DELTA = RANGE_KM / (111 * Math.cos(geoLat * Math.PI / 180));
+
+  const candidates = [];
+  for (let i = 0; i < GRID; i++) {
+    for (let j = 0; j < GRID; j++) {
+      const lat = geoLat + (i - Math.floor(GRID / 2)) * (LAT_DELTA * 2 / (GRID - 1));
+      const lng = geoLng + (j - Math.floor(GRID / 2)) * (LNG_DELTA * 2 / (GRID - 1));
+      candidates.push({ lat, lng });
+    }
+  }
+
+  const scored = [];
+  document.getElementById("loadingText").textContent = `후보 ${candidates.length}곳 탐색 중...`;
+
+  for (let idx = 0; idx < candidates.length; idx++) {
+    const cand = candidates[idx];
+    document.getElementById("loadingText").textContent =
+      `후보 탐색 중... (${idx + 1} / ${candidates.length})`;
+
+    const times = [];
+    let failed = false;
+    for (const p of valid) {
+      const t = await getTransitTime(p.lat, p.lng, cand.lat, cand.lng);
+      if (t === null) { failed = true; break; }
+      times.push(t);
+    }
+    if (failed) continue;
+
+    const avg = times.reduce((a, b) => a + b, 0) / times.length;
+    const maxDiff = Math.max(...times) - Math.min(...times);
+    const variance = times.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / times.length;
+    scored.push({ lat: cand.lat, lng: cand.lng, times, avg, maxDiff, variance });
+  }
+
+  hideLoading();
+
+  if (scored.length === 0) {
+    showError("교통 정보를 가져올 수 없었습니다. REST API 키를 확인하거나, 지리적 중앙 모드를 사용해보세요.");
+    return;
+  }
+
+  // 분산(시간 차이) 기준 정렬
+  scored.sort((a, b) => a.variance - b.variance);
+  const best = scored[0];
+
+  // 1위 대비 maxDiff +10분 이내인 후보를 최대 9개 추려 대안으로 표시
+  const ALT_MARGIN = 10;
+  const alternatives = scored
+    .slice(1)
+    .filter(c => c.maxDiff <= best.maxDiff + ALT_MARGIN)
+    .slice(0, 9);
+
+  showResult({
+    lat: best.lat, lng: best.lng,
+    mode: "transit",
+    times: best.times,
+    persons: valid,
+    alternatives,
+  });
+}
+
+/* ── 카카오 모빌리티 대중교통 경로 API ── */
+async function getTransitTime(originLat, originLng, destLat, destLng) {
+  try {
+    const url = `https://apis-navi.kakaomobility.com/v1/directions?origin=${originLng},${originLat}&destination=${destLng},${destLat}&priority=RECOMMEND`;
+    const res = await fetch(url, {
+      headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` }
+    });
+    const data = await res.json();
+    if (data.routes && data.routes[0] && data.routes[0].summary) {
+      return Math.round(data.routes[0].summary.duration / 60); // 초 → 분
+    }
+    return null;
+  } catch(e) {
+    return null;
+  }
+}
+
+/* ============================================================
+   결과 표시
+   ============================================================ */
+let altMarkers = [];
+
+function reverseGeocode(lng, lat, callback) {
+  if (geocoder) {
+    geocoder.coord2Address(lng, lat, (result, status) => {
+      if (status === kakao.maps.services.Status.OK) {
+        const addr = result[0].road_address
+          ? result[0].road_address.address_name
+          : result[0].address.address_name;
+        callback(addr);
+      } else { callback(null); }
+    });
+  } else {
+    fetch(`https://dapi.kakao.com/v2/local/geo/coord2address.json?x=${lng}&y=${lat}`,
+      { headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.documents && data.documents[0]) {
+        const doc = data.documents[0];
+        callback(doc.road_address ? doc.road_address.address_name : doc.address.address_name);
+      } else { callback(null); }
+    }).catch(() => callback(null));
+  }
+}
+
+function showResult({ lat, lng, mode, times, persons: ps, alternatives }) {
+  const block = document.getElementById("resultBlock");
+  block.classList.add("visible");
+
+  document.getElementById("resCoord").textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+  reverseGeocode(lng, lat, addr => {
+    if (addr) document.getElementById("resAddr").textContent = addr;
+  });
+
+  // 교통 결과 테이블
+  const transitWrap = document.getElementById("transitResultWrap");
+  if (mode === "transit" && times && ps) {
+    transitWrap.style.display = "block";
+    const tbody = document.getElementById("transitTableBody");
+    const avg = times.reduce((a, b) => a + b, 0) / times.length;
+    const maxT = Math.max(...times);
+    const minT = Math.min(...times);
+    tbody.innerHTML = ps.map((p, i) => {
+      const diff = Math.abs(times[i] - avg);
+      const badge = diff < 5 ? "good" : "warn";
+      return `<tr>
+        <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${p.color};margin-right:5px"></span>${p.name}</td>
+        <td style="font-family:var(--font-mono)">${times[i]}분</td>
+        <td><span class="diff-badge ${badge}">±${diff.toFixed(0)}분</span></td>
+      </tr>`;
+    }).join("");
+    const diff = maxT - minT;
+    document.getElementById("maxDiff").innerHTML =
+      `<span class="diff-badge ${diff < 10 ? 'good' : 'warn'}">${diff}분</span>`;
+  } else {
+    transitWrap.style.display = "none";
+  }
+
+  // 대안 후보 목록
+  const altWrap = document.getElementById("altCandidatesWrap");
+  if (mode === "transit" && alternatives && alternatives.length > 0) {
+    altWrap.style.display = "block";
+    const altList = document.getElementById("altCandidatesList");
+    altList.innerHTML = "";
+    alternatives.forEach((alt, i) => {
+      const li = document.createElement("div");
+      li.className = "alt-item";
+      li.innerHTML = `
+        <div class="alt-rank">${i + 2}위</div>
+        <div class="alt-info">
+          <div class="alt-addr" id="altAddr_${i}">주소 확인 중...</div>
+          <div class="alt-times">${alt.times.map((t, j) => `<span style="color:${ps[j].color}">${ps[j].name} ${t}분</span>`).join(' · ')}</div>
+        </div>
+        <div><span class="diff-badge ${alt.maxDiff < 10 ? 'good' : 'warn'}">차이 ${alt.maxDiff}분</span></div>
+      `;
+      li.addEventListener("click", () => focusAltMarker(i, alt, ps));
+      altList.appendChild(li);
+      reverseGeocode(alt.lng, alt.lat, addr => {
+        const el = document.getElementById(`altAddr_${i}`);
+        if (el) el.textContent = addr || `${alt.lat.toFixed(4)}, ${alt.lng.toFixed(4)}`;
+      });
+    });
+  } else {
+    altWrap.style.display = "none";
+  }
+
+  // 지도 마커
+  if (map) {
+    altMarkers.forEach(m => m.setMap(null));
+    altMarkers = [];
+    if (midMarker) midMarker.setMap(null);
+
+    const bestSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="46" viewBox="0 0 36 46"><path d="M18 2C10.268 2 4 8.268 4 16c0 10 14 28 14 28S32 26 32 16C32 8.268 25.732 2 18 2z" fill="#ffd93d" stroke="white" stroke-width="2"/><circle cx="18" cy="16" r="8" fill="white" opacity="0.95"/><text x="18" y="20" text-anchor="middle" font-size="11" font-family="sans-serif">⭐</text></svg>`;
+    const pos = new kakao.maps.LatLng(lat, lng);
+    midMarker = new kakao.maps.Marker({
+      position: pos, map, zIndex: 10,
+      image: new kakao.maps.MarkerImage(
+        'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(bestSvg),
+        new kakao.maps.Size(36, 46),
+        { offset: new kakao.maps.Point(18, 46) }
+      )
+    });
+    const bestInfo = new kakao.maps.InfoWindow({
+      content: `<div style="padding:6px 10px;font-family:'Noto Sans KR',sans-serif;font-size:12px;color:#333;font-weight:600">⭐ 1위 — 최적 중간 지점<br><small style="font-weight:400;color:#888">${mode === "geo" ? "지리적 중앙" : `최대 차이 ${Math.max(...times) - Math.min(...times)}분`}</small></div>`
+    });
+    bestInfo.open(map, midMarker);
+    kakao.maps.event.addListener(midMarker, "click", () => bestInfo.open(map, midMarker));
+
+    if (alternatives) {
+      alternatives.forEach((alt, i) => {
+        const rank = i + 2;
+        const altSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36"><path d="M14 2C8.477 2 4 6.477 4 12c0 7 10 22 10 22S24 19 24 12C24 6.477 19.523 2 14 2z" fill="#718096" stroke="white" stroke-width="1.5"/><circle cx="14" cy="12" r="6" fill="white" opacity="0.9"/><text x="14" y="16" text-anchor="middle" font-size="8" font-family="sans-serif" font-weight="700" fill="#2d3748">${rank}</text></svg>`;
+        const altPos = new kakao.maps.LatLng(alt.lat, alt.lng);
+        const altMarker = new kakao.maps.Marker({
+          position: altPos, map, zIndex: 5,
+          image: new kakao.maps.MarkerImage(
+            'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(altSvg),
+            new kakao.maps.Size(28, 36),
+            { offset: new kakao.maps.Point(14, 36) }
+          )
+        });
+        const altInfo = new kakao.maps.InfoWindow({
+          content: `<div style="padding:5px 9px;font-family:'Noto Sans KR',sans-serif;font-size:11px;color:#333"><b>${rank}위 후보</b> · 차이 ${alt.maxDiff}분<br><small>${alt.times.map((t, j) => `${ps[j].name} ${t}분`).join(' / ')}</small></div>`
+        });
+        kakao.maps.event.addListener(altMarker, "click", () => {
+          altInfo.open(map, altMarker);
+          highlightAltItem(i);
+        });
+        altMarkers.push(altMarker);
+      });
+    }
+    map.panTo(pos);
+  }
+}
+
+function focusAltMarker(i, alt, ps) {
+  if (!map) return;
+  highlightAltItem(i);
+  map.panTo(new kakao.maps.LatLng(alt.lat, alt.lng));
+  if (altMarkers[i]) {
+    const info = new kakao.maps.InfoWindow({
+      content: `<div style="padding:5px 9px;font-family:'Noto Sans KR',sans-serif;font-size:11px;color:#333"><b>${i+2}위 후보</b> · 차이 ${alt.maxDiff}분<br><small>${alt.times.map((t, j) => `${ps[j].name} ${t}분`).join(' / ')}</small></div>`
+    });
+    info.open(map, altMarkers[i]);
+  }
+}
+
+function highlightAltItem(activeIdx) {
+  document.querySelectorAll('.alt-item').forEach((el, i) => {
+    el.classList.toggle('active', i === activeIdx);
+  });
+}
+/* ============================================================
+   유틸
+   ============================================================ */
+function showLoading(text) {
+  document.getElementById("loadingText").textContent = text || "계산 중...";
+  document.getElementById("loadingOverlay").classList.add("visible");
+  document.getElementById("calcBtn").disabled = true;
+}
+function hideLoading() {
+  document.getElementById("loadingOverlay").classList.remove("visible");
+  document.getElementById("calcBtn").disabled = false;
+}
+function showError(msg) {
+  const el = document.getElementById("errorMsg");
+  el.textContent = msg;
+  el.classList.add("visible");
+}
+function clearError() {
+  document.getElementById("errorMsg").classList.remove("visible");
+}
+</script>
+</body>
+</html>
